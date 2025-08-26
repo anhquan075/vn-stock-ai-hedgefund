@@ -8,7 +8,7 @@ from agno.team import Team
 from rich.console import Console
 
 from utils import technical_analysis as ta_utils
-from utils.logging import log_info, log_markdown_panel
+from utils.logging import log_dataframe, log_info, log_markdown_panel
 
 from .analysts import (
     AnalysisAgent,
@@ -19,6 +19,7 @@ from .analysts import (
 )
 from .researchers import ResearchTeam
 from .trading import PortfolioManager, TraderAgent
+from .backtest_agent import BacktestAgent
 
 
 class Orchestrator:
@@ -64,7 +65,7 @@ class Orchestrator:
         console = Console()
 
         # 1. Data Gathering
-        with console.status("[bold cyan]1/6 Fetching data...", spinner="dots"):
+        with console.status("[bold cyan]1/7 Fetching data...", spinner="dots"):
             log_info("[Orchestrator] Fetching OHLCV data...")
             ohlcv = await asyncio.to_thread(
                 self._data_agent.fetch,
@@ -75,7 +76,7 @@ class Orchestrator:
         log_info("[Orchestrator] Data fetched.")
 
         # 2. Analyst Team Reports (LLM-enabled)
-        with console.status("[bold cyan]2/6 Analyst Team...", spinner="dots"):
+        with console.status("[bold cyan]2/7 Analyst Team...", spinner="dots"):
             log_info("[Orchestrator] Running Analyst Team...")
             analyst_response = await asyncio.to_thread(
                 self.analyst_team.run,
@@ -90,7 +91,7 @@ class Orchestrator:
         log_info("[Orchestrator] Analyst Team completed.")
 
         # 3. Technical Analyst (needs OHLCV)
-        with console.status("[bold cyan]3/6 Technical Analysis...", spinner="dots"):
+        with console.status("[bold cyan]3/7 Technical Analysis...", spinner="dots"):
             technical_report = await self._technical_analyst.arun(
                 ohlcv, indicators=indicators
             )
@@ -136,7 +137,7 @@ class Orchestrator:
         log_markdown_panel("Analyst Team Reports", compiled_research)
 
         # 4. Research Team (Agno Team) + Debate
-        with console.status("[bold cyan]4/6 Research Team...", spinner="dots"):
+        with console.status("[bold cyan]4/7 Research Team...", spinner="dots"):
             bull_case, bear_case = await self._research_team.run(symbol, ohlcv)
         debate_summary = f"## Bullish Case\n{bull_case}\n\n## Bearish Case\n{bear_case}"
         log_markdown_panel("Researcher Team Debate", debate_summary)
@@ -153,7 +154,7 @@ class Orchestrator:
             "- Constraint: Entry should be within ±1% of Latest Close unless justified; "
             "Stop below Support for BUY and above Resistance for SELL; Target near the opposite band."
         )
-        with console.status("[bold cyan]5/6 Trader Plan...", spinner="dots"):
+        with console.status("[bold cyan]5/7 Trader Plan...", spinner="dots"):
             trade_plan = await asyncio.to_thread(
                 self._trader.run, debate_summary + ta_context
             )
@@ -163,8 +164,13 @@ class Orchestrator:
         log_markdown_panel("Trader's Plan", trade_plan_text)
 
         # 6. Portfolio Manager Final Decision
-        with console.status("[bold cyan]6/6 Portfolio Decision...", spinner="dots"):
+        with console.status("[bold cyan]6/7 Portfolio Decision...", spinner="dots"):
             final_decision = await asyncio.to_thread(
                 self._portfolio_manager.run, trade_plan
             )
         log_markdown_panel("Portfolio Manager's Final Decision", str(final_decision))
+
+        # 7. Backtest the default strategy for reference
+        with console.status("[bold cyan]7/7 Backtest...", spinner="dots"):
+            stats = await asyncio.to_thread(BacktestAgent().run, ohlcv)
+        log_dataframe(pd.DataFrame([stats]), title="Backtest Results")

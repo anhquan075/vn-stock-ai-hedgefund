@@ -12,14 +12,11 @@ from vnstock import Company, Finance
 
 from config.settings import settings
 
-from .strategy_agent import StrategyAgent
-
-
 @tool
 def run_backtest_tool(
     ohlcv: pd.DataFrame, *, strategy_config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Execute a backtest on the provided OHLCV data.
+    """Execute a vectorised backtest on the provided OHLCV data.
 
     Args:
         ohlcv: Historical OHLCV data with columns ``Open, High, Low, Close, Volume``.
@@ -33,7 +30,7 @@ def run_backtest_tool(
         BacktestAgent,  # local import to avoid heavy deps at import time
     )
 
-    engine = BacktestAgent(strategy_agent=None)
+    engine = BacktestAgent()
     return engine.run(ohlcv, strategy_config=strategy_config)
 
 

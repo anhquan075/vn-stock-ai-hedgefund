@@ -1,47 +1,50 @@
-"""Backtest agent using Backtesting.py (lightweight alternative to NautilusTrader)."""
+"""Lightweight backtester built on vectorbt."""
 
-from typing import Any, Callable
+from __future__ import annotations
+
+from typing import Any
 
 import pandas as pd
-from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
-
-
-class _SMAStrategy(Strategy):
-    n_fast = 20
-    n_slow = 50
-
-    def init(self):  # noqa: D401
-        close = pd.Series(self.data.Close)
-        self.sma_fast = self.I(close.rolling(self.n_fast).mean)
-        self.sma_slow = self.I(close.rolling(self.n_slow).mean)
-
-    def next(self):  # noqa: D401
-        if crossover(self.sma_fast, self.sma_slow):
-            self.position.close()
-            self.buy()
-        elif crossover(self.sma_slow, self.sma_fast):
-            self.position.close()
-            self.sell()
+import vectorbt as vbt
 
 
 class BacktestAgent:
-    """Run a backtest over OHLCV using Backtesting.py.
+    """Run a vectorised backtest over OHLCV data.
 
-    If `strategy_fn` is provided, it should return a subclass of backtesting.Strategy.
+    Uses a simple moving-average crossover strategy by default. Parameters can
+    be tweaked via ``strategy_config`` which supports ``fast``, ``slow``,
+    ``cash`` and ``commission`` keys.
     """
-
-    def __init__(self, strategy_fn: Callable[[], type[Strategy]] | None = None) -> None:  # noqa: D401
-        self._strategy_fn = strategy_fn or (lambda: _SMAStrategy)
 
     def run(
         self, ohlcv: pd.DataFrame, *, strategy_config: dict[str, Any] | None = None
-    ) -> dict[str, Any]:  # noqa: D401
+    ) -> dict[str, Any]:
+        """Execute the backtest and return key performance statistics."""
+
         if not isinstance(ohlcv.index, pd.DatetimeIndex):
             ohlcv = ohlcv.copy()
             ohlcv.index = pd.to_datetime(ohlcv.index)
 
-        strategy_cls = self._strategy_fn()
-        bt = Backtest(ohlcv, strategy_cls, cash=100_000, commission=0.001)
-        stats = bt.run()
-        return dict(stats)
+        cfg = strategy_config or {}
+        fast = int(cfg.get("fast", 20))
+        slow = int(cfg.get("slow", 50))
+        cash = float(cfg.get("cash", 100_000))
+        commission = float(cfg.get("commission", 0.001))
+
+        price = ohlcv["Close"]
+        fast_ma = price.rolling(window=fast).mean()
+        slow_ma = price.rolling(window=slow).mean()
+
+        entries = fast_ma > slow_ma
+        exits = fast_ma < slow_ma
+
+        portfolio = vbt.Portfolio.from_signals(
+            price,
+            entries,
+            exits,
+            init_cash=cash,
+            fees=commission,
+        )
+
+        return portfolio.stats().to_dict()
+
