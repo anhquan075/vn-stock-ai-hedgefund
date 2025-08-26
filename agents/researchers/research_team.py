@@ -65,7 +65,7 @@ class SentimentAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[ReasoningTools(add_instructions=True)],
+            tools=[ReasoningTools(add_instructions=True), vn_news_data, vn_sec_filings],
             instructions=(
                 "You are a sentiment analyst monitoring Vietnamese sources. "
                 "Use public commentary to identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."

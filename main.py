@@ -17,7 +17,7 @@ def main():
         "--source",
         choices=["yfinance", "vnstock"],
         help="Data source provider",
-        default=None,
+        default="vnstock",
     )
     args = parser.parse_args()
 
