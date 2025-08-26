@@ -1,47 +1,70 @@
-"""Backtest agent using Backtesting.py (lightweight alternative to NautilusTrader)."""
+"""Vectorbt-powered SMA crossover backtester."""
+from __future__ import annotations
 
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Any
 
 import pandas as pd
-from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
+import vectorbt as vbt
 
 
-class _SMAStrategy(Strategy):
-    n_fast = 20
-    n_slow = 50
-
-    def init(self):  # noqa: D401
-        close = pd.Series(self.data.Close)
-        self.sma_fast = self.I(close.rolling(self.n_fast).mean)
-        self.sma_slow = self.I(close.rolling(self.n_slow).mean)
-
-    def next(self):  # noqa: D401
-        if crossover(self.sma_fast, self.sma_slow):
-            self.position.close()
-            self.buy()
-        elif crossover(self.sma_slow, self.sma_fast):
-            self.position.close()
-            self.sell()
+@dataclass
+class BacktestStats:
+    final_equity: float
+    total_return: float
+    cagr: float
+    max_drawdown: float
+    sharpe: float
+    sortino: float
+    win_rate: float
 
 
 class BacktestAgent:
-    """Run a backtest over OHLCV using Backtesting.py.
-
-    If `strategy_fn` is provided, it should return a subclass of backtesting.Strategy.
-    """
-
-    def __init__(self, strategy_fn: Callable[[], type[Strategy]] | None = None) -> None:  # noqa: D401
-        self._strategy_fn = strategy_fn or (lambda: _SMAStrategy)
+    """Run an SMA crossover backtest using vectorbt."""
 
     def run(
         self, ohlcv: pd.DataFrame, *, strategy_config: dict[str, Any] | None = None
-    ) -> dict[str, Any]:  # noqa: D401
+    ) -> dict[str, Any]:
         if not isinstance(ohlcv.index, pd.DatetimeIndex):
             ohlcv = ohlcv.copy()
             ohlcv.index = pd.to_datetime(ohlcv.index)
 
-        strategy_cls = self._strategy_fn()
-        bt = Backtest(ohlcv, strategy_cls, cash=100_000, commission=0.001)
-        stats = bt.run()
-        return dict(stats)
+        cfg = strategy_config or {}
+        fast = int(cfg.get("fast", 20))
+        slow = int(cfg.get("slow", 50))
+        cash = float(cfg.get("cash", 100_000))
+        fee = float(cfg.get("commission", 0.001))
+
+        close = ohlcv["Close"]
+
+        fast_ma = vbt.MA.run(close, window=fast).ma
+        slow_ma = vbt.MA.run(close, window=slow).ma
+        entries = fast_ma > slow_ma
+        exits = fast_ma < slow_ma
+
+        pf = vbt.Portfolio.from_signals(
+            close, entries, exits, fees=fee, init_cash=cash, freq="1D"
+        )
+
+        stats_series = pf.stats()
+        trades_stats = pf.trades.stats()
+
+        final_equity = float(stats_series.get("End Value", cash))
+        start_value = float(stats_series.get("Start Value", cash))
+        periods = len(close)
+        cagr = (
+            (final_equity / start_value) ** (252 / max(periods - 1, 1)) - 1
+            if periods > 1
+            else 0.0
+        )
+
+        stats = BacktestStats(
+            final_equity=final_equity,
+            total_return=float(stats_series.get("Total Return [%]", 0.0)),
+            cagr=float(cagr * 100),
+            max_drawdown=float(stats_series.get("Max Drawdown [%]", 0.0)),
+            sharpe=float(stats_series.get("Sharpe Ratio", 0.0)),
+            sortino=float(stats_series.get("Sortino Ratio", 0.0)),
+            win_rate=float(trades_stats.get("Win Rate [%]", 0.0)),
+        )
+        return stats.__dict__

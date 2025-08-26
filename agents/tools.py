@@ -12,14 +12,11 @@ from vnstock import Company, Finance
 
 from config.settings import settings
 
-from .strategy_agent import StrategyAgent
-
-
 @tool
 def run_backtest_tool(
     ohlcv: pd.DataFrame, *, strategy_config: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    """Execute a backtest on the provided OHLCV data.
+    """Execute a vectorised backtest on the provided OHLCV data.
 
     Args:
         ohlcv: Historical OHLCV data with columns ``Open, High, Low, Close, Volume``.
@@ -33,7 +30,7 @@ def run_backtest_tool(
         BacktestAgent,  # local import to avoid heavy deps at import time
     )
 
-    engine = BacktestAgent(strategy_agent=None)
+    engine = BacktestAgent()
     return engine.run(ohlcv, strategy_config=strategy_config)
 
 
@@ -93,6 +90,130 @@ def vn_finance_report(
     kwargs["dropna"] = dropna
 
     df = fn(**kwargs)
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_company_news(
+    symbol: str,
+    *,
+    page_size: int = 15,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch recent company news via ``vnstock.Company``.
+
+    Args:
+        symbol: Ticker symbol, e.g., "VCB".
+        page_size: Number of news items to fetch.
+        page: Page index for pagination.
+        source: Data source (VCI|TCBS|MSN). Defaults to settings.VNSTOCK_SOURCE.
+
+    Returns:
+        A dict with keys ``columns`` and ``records`` representing the news
+        table.
+    """
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).news(
+        page_size=page_size, page=page
+    )  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_news_data(
+    symbol: str,
+    *,
+    page_size: int = 15,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Alias for :func:`vn_company_news` for compatibility with TradingAgents."""
+
+    return vn_company_news(
+        symbol, page_size=page_size, page=page, source=source
+    )
+
+
+@tool
+def vn_sec_filings(
+    symbol: str,
+    *,
+    page_size: int = 20,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch company events/filings via ``vnstock.Company.events``."""
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).events(
+        page_size=page_size, page=page
+    )  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_financials_as_reported(
+    symbol: str,
+    report_type: ReportType,
+    *,
+    period: PeriodType = "quarter",
+    lang: Literal["vi", "en"] | None = None,
+    dropna: bool = True,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch financial statements as reported via ``vnstock.Finance``."""
+
+    return vn_finance_report(
+        symbol,
+        report_type,
+        period=period,
+        lang=lang,
+        dropna=dropna,
+        source=source,
+    )
+
+
+@tool
+def vn_company_shareholders(
+    symbol: str,
+    *,
+    page_size: int = 20,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch major shareholders via ``vnstock.Company.shareholders``."""
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).shareholders(
+        page_size=page_size, page=page
+    )  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_finance_ratio(
+    symbol: str,
+    *,
+    period: PeriodType = "annual",
+    lang: Literal["vi", "en"] | None = None,
+    dropna: bool = True,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch financial ratios via ``vnstock.Finance.ratio``."""
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    fin = Finance(symbol=symbol, source=src)
+    df = fin.ratio(period=period, lang=lang, dropna=dropna)
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}

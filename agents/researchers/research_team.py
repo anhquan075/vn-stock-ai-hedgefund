@@ -13,6 +13,7 @@ from typing import Sequence
 
 import pandas as pd
 from agno.team import Team
+from agno.tools.googlesearch import GoogleSearchTools
 from agno.tools.reasoning import ReasoningTools  # type: ignore
 
 from utils import technical_analysis as ta_utils
@@ -20,6 +21,12 @@ from utils.logging import log_info
 from utils.model_factory import build_default_model
 
 from ..base_agent import BaseAgent
+from ..tools import (
+    vn_company_overview,
+    vn_financials_as_reported,
+    vn_news_data,
+    vn_sec_filings,
+)
 
 
 class FundamentalsAgent(BaseAgent):
@@ -28,12 +35,15 @@ class FundamentalsAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[ReasoningTools(add_instructions=True)],
+            tools=[
+                vn_company_overview,
+                vn_financials_as_reported,
+            ],
             instructions=(
-                "You are a fundamentals analyst. Given a VN equity ticker, "
-                "outline key financial aspects to consider (growth, margins, "
-                "leverage, cash flows) and list data you would seek. If data "
-                "is not provided, infer cautiously and state assumptions."
+                "You are a fundamentals researcher for Vietnamese stocks. "
+                "Retrieve company profile and financial statements using the provided tools, "
+                "then summarise profitability, growth, leverage and cash flow in markdown. "
+                "End with a small table of key ratios and an overall view: Bullish, Bearish or Neutral."
             ),
             name="fundamentals-agent",
             agent_id="fundamentals-agent",
@@ -57,9 +67,8 @@ class SentimentAgent(BaseAgent):
             model=build_default_model(),
             tools=[ReasoningTools(add_instructions=True)],
             instructions=(
-                "You are a sentiment analyst. Summarize likely investor "
-                "sentiment drivers for the ticker from social and news, "
-                "noting uncertainty when data is not provided."
+                "You are a sentiment analyst monitoring Vietnamese sources. "
+                "Use public commentary to identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."
             ),
             name="sentiment-agent",
             agent_id="sentiment-agent",
@@ -73,17 +82,45 @@ class SentimentAgent(BaseAgent):
         return content if isinstance(content, str) else str(content or "")
 
 
+class SocialMediaAgent(BaseAgent):
+    """Agent gathering chatter from Vietnamese investment forums."""
+
+    def __init__(self) -> None:  # noqa: D401
+        super().__init__(
+            model=build_default_model(),
+            tools=[
+                GoogleSearchTools(fixed_language="vi"),
+                ReasoningTools(add_instructions=True),
+            ],
+            instructions=(
+                "You are a social media analyst tracking Vietnamese investment forums (Facebook, Reddit, Voz). "
+                "Surface notable discussion themes about the ticker and classify the tone as bullish, bearish or neutral. "
+                "Note when information is sparse."
+            ),
+            name="social-media-agent",
+            agent_id="social-media-agent",
+            description="Social media analysis agent",
+            monitoring=False,
+        )
+
+    def analyse(self, symbol: str) -> str:
+        resp = super().run(
+            f"Summarize Vietnamese social media chatter for {symbol}."
+        )
+        content = getattr(resp, "content", None)
+        return content if isinstance(content, str) else str(content or "")
+
+
 class NewsAgent(BaseAgent):
     """Agent focusing on macro/news catalysts impacting the ticker."""
 
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[ReasoningTools(add_instructions=True)],
+            tools=[vn_news_data, vn_sec_filings, ReasoningTools(add_instructions=True)],
             instructions=(
-                "You are a news analyst. Identify plausible macro/company "
-                "catalysts, potential scenarios and how they might affect the "
-                "ticker. Note assumptions explicitly."
+                "You are a news analyst for Vietnamese equities. Use the news and filings tools to gather recent headlines "
+                "and combine with macro context to explain catalysts and their likely impact. State assumptions explicitly."
             ),
             name="news-agent",
             agent_id="news-agent",
@@ -186,6 +223,7 @@ class ResearchTeam:
         self.sentiment_agent = SentimentAgent()
         self.news_agent = NewsAgent()
         self.technical_agent = TechnicalResearchAgent()
+        self.social_media_agent = SocialMediaAgent()
 
         # Agno Team for coordinated synthesis
         self.team = Team(
@@ -195,6 +233,8 @@ class ResearchTeam:
                 self.fundamentals_agent,
                 self.sentiment_agent,
                 self.news_agent,
+                self.technical_agent,
+                self.social_media_agent,
             ],
             show_members_responses=False,
             markdown=True,
@@ -232,7 +272,9 @@ class ResearchTeam:
             "### Synthesis\n"
             "- Fundamentals: <2 short bullets>\n"
             "- Sentiment: <2 short bullets>\n"
-            "- News/Catalysts: <2 short bullets>\n\n"
+            "- News/Catalysts: <2 short bullets>\n"
+            "- Technicals: <2 short bullets>\n"
+            "- Social Media: <2 short bullets>\n\n"
             "### Key Risks\n"
             "- bullet\n- bullet\n\n"
             "### Watchlist\n"
