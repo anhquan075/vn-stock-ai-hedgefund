@@ -128,7 +128,7 @@ class DataAgent(BaseAgent):
                 "5d": "1D",
                 "1wk": "1W",
                 "1mo": "1M",
-                "3mo": "1M",
+                "3mo": "3M",
             }
             vn_interval = interval_map.get(interval, "1D")  # type: ignore[arg-type]
             start_str = start.strftime("%Y-%m-%d")
