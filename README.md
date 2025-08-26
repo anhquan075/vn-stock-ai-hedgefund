@@ -34,6 +34,7 @@ Key ideas adapted from coordinated multi-agent pipelines as introduced in Tradin
 - **Technical Analysis Agent**: Computes indicators (SMA/EMA/RSI/MACD/BB) and produces a concise TA report.
 - **Research Team**: Debates bullish and bearish theses.
 - **Trader + PM**: Synthesizes a clear plan (entry/stop/target) and issues a final PM approval decision.
+- **Vectorbt Backtester**: High-performance SMA crossover engine with rich performance stats and optional Telegram alerts.
 
 ---
 
@@ -95,6 +96,26 @@ Using `vnstock` as the data source requires explicit start and end dates:
 ```bash
 uv run python -m finance_agent_new.main VNM.VN --source vnstock --start 2023-01-01 --end 2023-12-31
 ```
+
+### Backtesting CLI
+
+Run the standalone SMA-crossover backtester with uv:
+
+```bash
+uv run python backtester.py VCB --start 2023-01-01 --end 2023-06-30
+```
+
+Set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` to receive a summary notification after each run.
+
+### FastAPI backend
+
+Spin up an API server that exposes a `/backtest` endpoint:
+
+```bash
+uv run uvicorn backend.app:app --reload
+```
+
+POST JSON payloads to `/backtest` with `symbol`, `start`, and `end` fields to receive performance stats.
 
 ---
 
