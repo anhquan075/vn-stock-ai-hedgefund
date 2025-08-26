@@ -160,49 +160,6 @@ def vn_sec_filings(
 
 
 @tool
-def vn_insider_transactions(
-    symbol: str,
-    *,
-    page_size: int = 20,
-    page: int = 0,
-    source: str | None = None,
-) -> dict[str, Any]:
-    """Fetch insider transactions via ``vnstock.Company.insider_deals``."""
-
-    src = (source or settings.VNSTOCK_SOURCE).upper()
-    df = Company(symbol=symbol, source=src).insider_deals(
-        page_size=page_size, page=page
-    )  # type: ignore[arg-type]
-    if not isinstance(df, pd.DataFrame):
-        df = pd.DataFrame(df)
-    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
-
-
-@tool
-def vn_insider_sentiment(
-    symbol: str,
-    *,
-    source: str | None = None,
-) -> dict[str, Any]:
-    """Derive insider trading sentiment from net buy/sell quantities."""
-
-    src = (source or settings.VNSTOCK_SOURCE).upper()
-    df = Company(symbol=symbol, source=src).insider_deals()
-    if not isinstance(df, pd.DataFrame):
-        df = pd.DataFrame(df)
-    buys = df[df["deal_action"].str.contains("Mua", case=False)]["deal_quantity"].sum()
-    sells = df[df["deal_action"].str.contains("Bán", case=False)]["deal_quantity"].sum()
-    net = float(buys - sells)
-    sentiment = "bullish" if net > 0 else "bearish" if net < 0 else "neutral"
-    return {
-        "net_buy": float(buys),
-        "net_sell": float(sells),
-        "net_quantity": net,
-        "sentiment": sentiment,
-    }
-
-
-@tool
 def vn_financials_as_reported(
     symbol: str,
     report_type: ReportType,
@@ -222,3 +179,41 @@ def vn_financials_as_reported(
         dropna=dropna,
         source=source,
     )
+
+
+@tool
+def vn_company_shareholders(
+    symbol: str,
+    *,
+    page_size: int = 20,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch major shareholders via ``vnstock.Company.shareholders``."""
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).shareholders(
+        page_size=page_size, page=page
+    )  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_finance_ratio(
+    symbol: str,
+    *,
+    period: PeriodType = "annual",
+    lang: Literal["vi", "en"] | None = None,
+    dropna: bool = True,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch financial ratios via ``vnstock.Finance.ratio``."""
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    fin = Finance(symbol=symbol, source=src)
+    df = fin.ratio(period=period, lang=lang, dropna=dropna)
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}

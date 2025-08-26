@@ -4,7 +4,8 @@ from ..base_agent import BaseAgent
 from ..tools import (
     vn_company_overview,
     vn_financials_as_reported,
-    vn_insider_transactions,
+    vn_company_shareholders,
+    vn_finance_ratio,
 )
 
 
@@ -17,14 +18,13 @@ class FundamentalAnalyst(BaseAgent):
             tools=[
                 vn_company_overview,
                 vn_financials_as_reported,
-                vn_insider_transactions,
+                vn_company_shareholders,
+                vn_finance_ratio,
             ],
             instructions=(
                 "You are a fundamentals researcher focused on Vietnamese equities. "
-                "Use the provided tools to retrieve company profiles, financial statements, "
-                "and insider transaction data. "
-                "Write a concise markdown report covering profitability, growth, leverage, cash flow, "
-                "and notable insider activity. "
+                "Use the provided tools to retrieve company profiles, financial statements, shareholder data, and ratios. "
+                "Write a concise markdown report covering profitability, growth, leverage, cash flow, and ownership. "
                 "Conclude with an overall view: Bullish, Bearish or Neutral, and include a small markdown table of key ratios."
             ),
             name="fundamental-analyst",

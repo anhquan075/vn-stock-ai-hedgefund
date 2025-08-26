@@ -6,7 +6,9 @@ from typing import Any
 import pandas as pd
 from colorama import Fore, Style, init
 
-from vnstock import Vnstock
+from vnstock import Company
+
+from config.settings import settings
 
 from agents.backtest_agent import BacktestAgent
 from utils.logging import print_backtest_stats
@@ -16,9 +18,10 @@ init(autoreset=True)
 
 
 def fetch_ohlcv(symbol: str, start: str, end: str) -> pd.DataFrame:
-    """Fetch daily OHLCV data for ``symbol`` between ``start`` and ``end`` dates."""
-    client = Vnstock().stock(symbol=symbol)
-    df = client.quote.history(start=start, end=end, interval="1D")
+    """Fetch daily OHLCV data using ``vnstock.Company.history``."""
+
+    src = settings.VNSTOCK_SOURCE.upper()
+    df = Company(symbol=symbol, source=src).history(start=start, end=end)
     df = df.rename(
         columns={"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
     )

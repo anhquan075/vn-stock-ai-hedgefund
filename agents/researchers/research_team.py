@@ -24,8 +24,6 @@ from ..base_agent import BaseAgent
 from ..tools import (
     vn_company_overview,
     vn_financials_as_reported,
-    vn_insider_transactions,
-    vn_insider_sentiment,
     vn_news_data,
     vn_sec_filings,
 )
@@ -40,13 +38,12 @@ class FundamentalsAgent(BaseAgent):
             tools=[
                 vn_company_overview,
                 vn_financials_as_reported,
-                vn_insider_transactions,
             ],
             instructions=(
                 "You are a fundamentals researcher for Vietnamese stocks. "
-                "Retrieve company profile, financial statements, and insider transactions using the provided tools, "
+                "Retrieve company profile and financial statements using the provided tools, "
                 "then summarise profitability, growth, leverage and cash flow in markdown. "
-                "Include notable insider activity. End with a small table of key ratios and an overall view: Bullish, Bearish or Neutral."
+                "End with a small table of key ratios and an overall view: Bullish, Bearish or Neutral."
             ),
             name="fundamentals-agent",
             agent_id="fundamentals-agent",
@@ -68,10 +65,10 @@ class SentimentAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[vn_insider_sentiment, ReasoningTools(add_instructions=True)],
+            tools=[ReasoningTools(add_instructions=True), vn_news_data, vn_sec_filings],
             instructions=(
                 "You are a sentiment analyst monitoring Vietnamese sources. "
-                "Use insider trading sentiment and public commentary to identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."
+                "Use public commentary to identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."
             ),
             name="sentiment-agent",
             agent_id="sentiment-agent",
