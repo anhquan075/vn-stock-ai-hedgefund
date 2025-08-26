@@ -8,7 +8,7 @@ from agno.team import Team
 from rich.console import Console
 
 from utils import technical_analysis as ta_utils
-from utils.logging import log_dataframe, log_info, log_markdown_panel
+from utils.logging import log_info, log_markdown_panel, print_backtest_stats
 
 from .analysts import (
     AnalysisAgent,
@@ -173,4 +173,4 @@ class Orchestrator:
         # 7. Backtest the default strategy for reference
         with console.status("[bold cyan]7/7 Backtest...", spinner="dots"):
             stats = await asyncio.to_thread(BacktestAgent().run, ohlcv)
-        log_dataframe(pd.DataFrame([stats]), title="Backtest Results")
+        print_backtest_stats(stats)
