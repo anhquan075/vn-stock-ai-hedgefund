@@ -3,7 +3,7 @@ from agno.tools.googlesearch import GoogleSearchTools
 from utils.model_factory import build_default_model
 
 from ..base_agent import BaseAgent
-from ..tools import vn_company_news
+from ..tools import vn_news_data, vn_sec_filings
 
 
 class NewsAnalyst(BaseAgent):
@@ -12,10 +12,10 @@ class NewsAnalyst(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[vn_company_news, GoogleSearchTools(fixed_language="vi")],
+            tools=[vn_news_data, vn_sec_filings, GoogleSearchTools(fixed_language="vi")],
             instructions=(
                 "You are a news researcher covering Vietnamese equities. "
-                "Review recent company news and broader macro headlines. "
+                "Review recent company news, SEC filings, and broader macro headlines. "
                 "Summarize key catalysts and note whether each is bullish or bearish for the ticker. "
                 "Finish with a short markdown table of headline and sentiment."
             ),

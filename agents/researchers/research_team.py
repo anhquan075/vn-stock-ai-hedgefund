@@ -21,7 +21,14 @@ from utils.logging import log_info
 from utils.model_factory import build_default_model
 
 from ..base_agent import BaseAgent
-from ..tools import vn_company_overview, vn_finance_report, vn_company_news
+from ..tools import (
+    vn_company_overview,
+    vn_financials_as_reported,
+    vn_insider_transactions,
+    vn_insider_sentiment,
+    vn_news_data,
+    vn_sec_filings,
+)
 
 
 class FundamentalsAgent(BaseAgent):
@@ -30,12 +37,16 @@ class FundamentalsAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[vn_company_overview, vn_finance_report],
+            tools=[
+                vn_company_overview,
+                vn_financials_as_reported,
+                vn_insider_transactions,
+            ],
             instructions=(
                 "You are a fundamentals researcher for Vietnamese stocks. "
-                "Retrieve company profile and financial statements using the provided tools, "
+                "Retrieve company profile, financial statements, and insider transactions using the provided tools, "
                 "then summarise profitability, growth, leverage and cash flow in markdown. "
-                "End with a small table of key ratios and an overall view: Bullish, Bearish or Neutral."
+                "Include notable insider activity. End with a small table of key ratios and an overall view: Bullish, Bearish or Neutral."
             ),
             name="fundamentals-agent",
             agent_id="fundamentals-agent",
@@ -57,10 +68,10 @@ class SentimentAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[ReasoningTools(add_instructions=True)],
+            tools=[vn_insider_sentiment, ReasoningTools(add_instructions=True)],
             instructions=(
                 "You are a sentiment analyst monitoring Vietnamese sources. "
-                "Identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."
+                "Use insider trading sentiment and public commentary to identify crowd mood and key drivers for the ticker, noting uncertainty when data is missing."
             ),
             name="sentiment-agent",
             agent_id="sentiment-agent",
@@ -109,9 +120,9 @@ class NewsAgent(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[vn_company_news, ReasoningTools(add_instructions=True)],
+            tools=[vn_news_data, vn_sec_filings, ReasoningTools(add_instructions=True)],
             instructions=(
-                "You are a news analyst for Vietnamese equities. Use the news tool to gather recent headlines "
+                "You are a news analyst for Vietnamese equities. Use the news and filings tools to gather recent headlines "
                 "and combine with macro context to explain catalysts and their likely impact. State assumptions explicitly."
             ),
             name="news-agent",
