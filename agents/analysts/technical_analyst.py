@@ -1,9 +1,9 @@
 """Agent responsible for running technical analysis on OHLCV data.
 
 This agent consumes a :class:`pandas.DataFrame` containing historical market
-prices and computes a suite of technical indicators using the *ta* library.
-It then explains the results leveraging the reasoning capabilities of the
-underlying LLM via Agno.
+prices and computes a wide range of indicators and candlestick patterns using
+the C-backed `TA-Lib` library. The resulting snapshot is then explained via
+the reasoning capabilities of the underlying LLM through Agno.
 """
 
 import asyncio
