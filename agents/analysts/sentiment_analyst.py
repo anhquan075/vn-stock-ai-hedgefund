@@ -3,7 +3,7 @@ from agno.tools.googlesearch import GoogleSearchTools
 from utils.model_factory import build_default_model
 
 from ..base_agent import BaseAgent
-from ..tools import vn_company_overview
+from ..tools import vn_insider_sentiment
 
 
 class SentimentAnalyst(BaseAgent):
@@ -12,10 +12,12 @@ class SentimentAnalyst(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[GoogleSearchTools(fixed_language="vi"), vn_company_overview],
+            tools=[vn_insider_sentiment, GoogleSearchTools(fixed_language="vi")],
             instructions=(
-                "You are a Social Media Sentiment Analyst. Gauge market mood by searching social sources "
-                "and summarize sentiment (Bullish/Bearish/Neutral)."
+                "You are a sentiment analyst monitoring Vietnamese social media and forums (Facebook, Reddit, Voz, etc.). "
+                "Search these sources to gauge public mood on the ticker, incorporate insider trading sentiment, "
+                "highlight prevailing themes and classify sentiment as Bullish, Bearish or Neutral. "
+                "End with a small markdown table of source and tone."
             ),
             name="sentiment-analyst",
             agent_id="sentiment-analyst",

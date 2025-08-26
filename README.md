@@ -96,6 +96,24 @@ Using `vnstock` as the data source requires explicit start and end dates:
 uv run python -m finance_agent_new.main VNM.VN --source vnstock --start 2023-01-01 --end 2023-12-31
 ```
 
+### Backtesting CLI
+
+Run the standalone SMA-crossover backtester with uv:
+
+```bash
+uv run python backtester.py VCB --start 2023-01-01 --end 2023-06-30
+```
+
+### FastAPI backend
+
+Spin up an API server that exposes a `/backtest` endpoint:
+
+```bash
+uv run uvicorn backend.app:app --reload
+```
+
+POST JSON payloads to `/backtest` with `symbol`, `start`, and `end` fields to receive performance stats.
+
 ---
 
 ## Project Structure

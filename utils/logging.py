@@ -10,7 +10,11 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
 
+from colorama import Fore, Style, init
+from tabulate import tabulate
+
 _console = Console()
+init(autoreset=True)
 
 
 def log_info(message: str) -> None:
@@ -73,3 +77,29 @@ def log_markdown_panel(title: str, md_text: str) -> None:
         _console.print(Panel.fit(Markdown(md_text), title=title))
     else:
         print(f"--- {title} ---\n{md_text}")
+
+
+def print_backtest_stats(stats: dict[str, Any]) -> None:
+    """Render backtest statistics in a colored table similar to ai-hedge-fund."""
+
+    def _fmt(name: str, value: float, invert: bool = False) -> list[str]:
+        color = Fore.GREEN if (value >= 0) ^ invert else Fore.RED
+        if "drawdown" in name.lower():
+            color = Fore.RED if value > 0 else Fore.GREEN
+        return [name, f"{color}{value:,.2f}{Style.RESET_ALL}"]
+
+    rows = [
+        _fmt("Final Equity", stats.get("final_equity", 0.0)),
+        _fmt("CAGR", stats.get("cagr", 0.0)),
+        _fmt("Max Drawdown", stats.get("max_drawdown", 0.0), invert=True),
+        _fmt("Sharpe", stats.get("sharpe", 0.0)),
+    ]
+
+    print(
+        tabulate(
+            rows,
+            headers=[f"{Fore.WHITE}Metric", f"{Fore.WHITE}Value"],
+            tablefmt="grid",
+            colalign=("left", "right"),
+        )
+    )
