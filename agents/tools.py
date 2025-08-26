@@ -96,3 +96,33 @@ def vn_finance_report(
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
+
+
+@tool
+def vn_company_news(
+    symbol: str,
+    *,
+    page_size: int = 15,
+    page: int = 0,
+    source: str | None = None,
+) -> dict[str, Any]:
+    """Fetch recent company news via ``vnstock.Company``.
+
+    Args:
+        symbol: Ticker symbol, e.g., "VCB".
+        page_size: Number of news items to fetch.
+        page: Page index for pagination.
+        source: Data source (VCI|TCBS|MSN). Defaults to settings.VNSTOCK_SOURCE.
+
+    Returns:
+        A dict with keys ``columns`` and ``records`` representing the news
+        table.
+    """
+
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).news(
+        page_size=page_size, page=page
+    )  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
