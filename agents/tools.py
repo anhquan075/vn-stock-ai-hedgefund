@@ -12,6 +12,7 @@ from vnstock import Company, Finance
 
 from config.settings import settings
 
+
 @tool
 def run_backtest_tool(
     ohlcv: pd.DataFrame, *, strategy_config: dict[str, Any] | None = None
@@ -52,11 +53,15 @@ def vn_company_overview(symbol: str, source: str | None = None) -> dict[str, Any
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
 
 
-ReportType = Literal["balance_sheet", "income_statement", "cash_flow", "ratio"]
+ReportType = Literal[
+    "balance_sheet", "income_statement", "cash_flow", "ratio", "profit_loss"
+]
 PeriodType = Literal["quarter", "annual", "year"]
 
 
-def _parse_period_input(period: PeriodType | dict[str, Any]) -> Tuple[PeriodType, dict[str, Any]]:
+def _parse_period_input(
+    period: PeriodType | dict[str, Any],
+) -> Tuple[PeriodType, dict[str, Any]]:
     """Normalize period input.
 
     Accepts either a simple period string (``"quarter"`` or ``"annual"``/``"year"``)
@@ -76,7 +81,6 @@ def _parse_period_input(period: PeriodType | dict[str, Any]) -> Tuple[PeriodType
     return period, {}
 
 
-@tool
 def vn_finance_report(
     symbol: str,
     report_type: ReportType,
@@ -120,7 +124,6 @@ def vn_finance_report(
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
 
 
-@tool
 def vn_company_news(
     symbol: str,
     *,
@@ -142,9 +145,7 @@ def vn_company_news(
     """
 
     src = (source or settings.VNSTOCK_SOURCE).upper()
-    df = Company(symbol=symbol, source=src).news(
-        page_size=page_size, page=page
-    )  # type: ignore[arg-type]
+    df = Company(symbol=symbol, source=src).news(page_size=page_size, page=page)  # type: ignore[arg-type]
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
@@ -154,30 +155,32 @@ def vn_company_news(
 def vn_news_data(
     symbol: str,
     *,
-    page_size: int = 15,
+    page_size: int = 5,  # Reduced default from 15 to 5
     page: int = 0,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Alias for :func:`vn_company_news` for compatibility with TradingAgents."""
+    """Fetch recent company news with limited size to manage context."""
 
-    return vn_company_news(
-        symbol, page_size=page_size, page=page, source=source
-    )
+    src = (source or settings.VNSTOCK_SOURCE).upper()
+    df = Company(symbol=symbol, source=src).news(page_size=page_size, page=page)  # type: ignore[arg-type]
+    if not isinstance(df, pd.DataFrame):
+        df = pd.DataFrame(df)
+    return {"columns": list(df.columns), "records": df.to_dict(orient="records")}
 
 
 @tool
 def vn_sec_filings(
     symbol: str,
     *,
-    page_size: int = 20,
+    page_size: int = 5,  # Reduced default from 20 to 5
     page: int = 0,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Fetch company events/filings via ``vnstock.Company.events``."""
+    """Fetch company events/filings with limited size to manage context."""
 
     src = (source or settings.VNSTOCK_SOURCE).upper()
     df = Company(symbol=symbol, source=src).events(
-        page_size=page_size, page=page
+        page_size=min(page_size, 5), page=page
     )  # type: ignore[arg-type]
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
@@ -187,7 +190,7 @@ def vn_sec_filings(
 @tool
 def vn_financials_as_reported(
     symbol: str,
-    report_type: ReportType | dict[str, Any],
+    report_type: ReportType = "balance_sheet",
     *,
     period: PeriodType | dict[str, Any] = "quarter",
     lang: Literal["vi", "en"] | None = None,
@@ -196,26 +199,28 @@ def vn_financials_as_reported(
 ) -> dict[str, Any]:
     """Fetch financial statements as reported via ``vnstock.Finance``.
 
-    ``report_type`` may be provided either as a simple string or as a mapping
-    with keys ``type`` and ``period``. Likewise ``period`` itself may be a
-    mapping (e.g., ``{"quarter": 1, "year": 2023}``) to request a specific
-    reporting window.
-    """
+    Args:
+        symbol: Ticker symbol, e.g., "VCI".
+        report_type: Type of financial report to fetch. Must be one of:
+            'balance_sheet', 'income_statement', 'cash_flow', 'ratio', 'profit_loss'.
+        period: Either a simple period string or a mapping providing
+            ``year``/``quarter`` details.
+        lang: Optional language code where supported (e.g., "vi" or "en").
+        dropna: Whether to drop NA rows/columns if supported by the source.
+        source: Data source (VCI|TCBS). Defaults to settings.VNSTOCK_SOURCE.
 
+    Returns:
+        A dict with keys: columns, records
+    """
     extra_kwargs: dict[str, Any] = {}
-    if isinstance(report_type, dict):
-        period_info = report_type.get("period")
-        report_type = report_type.get("type", "balance_sheet")
-        if period_info is not None:
-            period, extra = _parse_period_input(period_info)
-            extra_kwargs.update(extra)
     if isinstance(period, dict):
-        period, extra = _parse_period_input(period)
+        period_val, extra = _parse_period_input(period)
         extra_kwargs.update(extra)
+        period = period_val
 
     return vn_finance_report(
         symbol,
-        report_type,  # type: ignore[arg-type]
+        report_type,
         period=period,
         lang=lang,
         dropna=dropna,
@@ -228,16 +233,14 @@ def vn_financials_as_reported(
 def vn_company_shareholders(
     symbol: str,
     *,
-    page_size: int = 20,
+    page_size: int = 10,  # Reduced default from 20 to 10
     page: int = 0,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Fetch major shareholders via ``vnstock.Company.shareholders``."""
+    """Fetch major shareholders with limited size to manage context."""
 
     src = (source or settings.VNSTOCK_SOURCE).upper()
-    df = Company(symbol=symbol, source=src).shareholders(
-        page_size=page_size, page=page
-    )  # type: ignore[arg-type]
+    df = Company(symbol=symbol, source=src).shareholders(page_size=page_size, page=page)  # type: ignore[arg-type]
     if not isinstance(df, pd.DataFrame):
         df = pd.DataFrame(df)
     return {"columns": list(df.columns), "records": df.to_dict(orient="records")}

@@ -3,9 +3,9 @@ from utils.model_factory import build_default_model
 from ..base_agent import BaseAgent
 from ..tools import (
     vn_company_overview,
-    vn_financials_as_reported,
     vn_company_shareholders,
     vn_finance_ratio,
+    vn_financials_as_reported,
 )
 
 

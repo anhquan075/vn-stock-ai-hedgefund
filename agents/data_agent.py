@@ -57,7 +57,7 @@ class DataAgent(BaseAgent):
             description="Fetches VN stock data via yfinance",
             monitoring=False,
         )
-        self._source: SourceType = (source or settings.DATA_SOURCE).lower()  # type: ignore[assignment]
+        self._source: SourceType = (source or settings.DATA_SOURCE).lower()   # type: ignore[assignment]
 
     # ---------------------------------------------------------------------
     # Public API
@@ -134,7 +134,7 @@ class DataAgent(BaseAgent):
             start_str = start.strftime("%Y-%m-%d")
             end_str = end.strftime("%Y-%m-%d")
 
-            base_symbol = symbol.replace(".VN", "").upper()
+            base_symbol = symbol.replace(".VN", "").upper() if self._source != "vnstock" else symbol.upper()
 
             df: pd.DataFrame | None = None
             # Use vnstock Quote API

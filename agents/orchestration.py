@@ -18,9 +18,9 @@ from .analysts import (
     NewsAnalyst,
     SentimentAnalyst,
 )
+from .backtest_agent import BacktestAgent
 from .researchers import ResearchTeam
 from .trading import PortfolioManager, TraderAgent
-from .backtest_agent import BacktestAgent
 
 
 class Orchestrator:
@@ -103,28 +103,31 @@ class Orchestrator:
             latest_row = enriched_df.iloc[-1]
 
             def _to_vnd(value: float) -> str:
+                if pd.isna(value):
+                    return "N/A"
                 vnd = int(float(value) * 1000.0)
                 return f"{vnd:,} ₫"
 
             last_close_vnd = _to_vnd(float(latest_row.get("Close")))
             sma20_vnd = (
                 _to_vnd(float(latest_row["SMA_20"]))
-                if "SMA_20" in enriched_df.columns
+                if "SMA_20" in enriched_df.columns and not pd.isna(latest_row["SMA_20"])
                 else "N/A"
             )
             ema20_vnd = (
                 _to_vnd(float(latest_row["EMA_20"]))
-                if "EMA_20" in enriched_df.columns
+                if "EMA_20" in enriched_df.columns and not pd.isna(latest_row["EMA_20"])
                 else "N/A"
             )
             bb_high_vnd = (
                 _to_vnd(float(latest_row["BB_high"]))
                 if "BB_high" in enriched_df.columns
+                and not pd.isna(latest_row["BB_high"])
                 else "N/A"
             )
             bb_low_vnd = (
                 _to_vnd(float(latest_row["BB_low"]))
-                if "BB_low" in enriched_df.columns
+                if "BB_low" in enriched_df.columns and not pd.isna(latest_row["BB_low"])
                 else "N/A"
             )
 

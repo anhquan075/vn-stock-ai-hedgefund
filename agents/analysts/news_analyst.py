@@ -12,7 +12,11 @@ class NewsAnalyst(BaseAgent):
     def __init__(self) -> None:  # noqa: D401
         super().__init__(
             model=build_default_model(),
-            tools=[vn_news_data, vn_sec_filings, GoogleSearchTools(fixed_language="vi")],
+            tools=[
+                vn_news_data,
+                vn_sec_filings,
+                GoogleSearchTools(fixed_language="vi"),
+            ],
             instructions=(
                 "You are a news researcher covering Vietnamese equities. "
                 "Review recent company news, SEC filings, and broader macro headlines. "
