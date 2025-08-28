@@ -23,4 +23,4 @@ def build_default_model() -> object:
         Groq = import_module("agno.models.groq").Groq  # type: ignore[attr-defined]
         return Groq(id=model_id or "llama-3.1-70b-versatile")
     OpenAIChat = import_module("agno.models.openai").OpenAIChat  # type: ignore[attr-defined]
-    return OpenAIChat(id=model_id or "gpt-4o", api_key=settings.OPENAI_API_KEY)
+    return OpenAIChat(id=model_id or "gpt-4.1", api_key=settings.OPENAI_API_KEY)

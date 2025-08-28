@@ -173,10 +173,3 @@ class Orchestrator:
                 self._portfolio_manager.run, trade_plan
             )
         log_markdown_panel("Portfolio Manager's Final Decision", str(final_decision))
-
-        # 7. Backtest the default strategy for reference
-        with console.status("[bold cyan]7/7 Backtest...", spinner="dots"):
-            stats = await asyncio.to_thread(BacktestAgent().run, ohlcv)
-        print_backtest_stats(stats)
-        summary = "\n".join(f"{k}: {v:.2f}" for k, v in stats.items())
-        send_telegram_message(f"Backtest {symbol}\n{summary}")

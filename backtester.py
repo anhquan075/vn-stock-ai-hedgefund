@@ -1,7 +1,5 @@
 """Long/short portfolio backtester using the project's multi-agent workflow."""
 
-from __future__ import annotations
-
 import argparse
 import asyncio
 import re
@@ -28,6 +26,7 @@ def get_price_data(ticker: str, start: str, end: str) -> pd.DataFrame:
     df = df.copy()
     df.index = pd.to_datetime(df["time"])
     return df.sort_index()
+
 
 def _parse_action(markdown: str) -> str:
     match = re.search(r"Action:\s*(BUY|SELL|HOLD)", markdown, re.IGNORECASE)
@@ -96,14 +95,14 @@ class Backtester:
                 }
                 for t in tickers
             },
-            "realized_gains": {
-                t: {"long": 0.0, "short": 0.0} for t in tickers
-            },
+            "realized_gains": {t: {"long": 0.0, "short": 0.0} for t in tickers},
         }
 
         self.portfolio_values: list[dict[str, Any]] = []
 
-    def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
+    def execute_trade(
+        self, ticker: str, action: str, quantity: float, current_price: float
+    ) -> int:
         """Update the portfolio for buy, sell, short or cover actions."""
 
         if quantity <= 0:
@@ -157,7 +156,9 @@ class Backtester:
             old_shares = position["short"]
             old_cost = position["short_cost_basis"] * old_shares
             new_total = old_shares + quantity
-            position["short_cost_basis"] = (old_cost + current_price * quantity) / new_total
+            position["short_cost_basis"] = (
+                old_cost + current_price * quantity
+            ) / new_total
             position["short"] = new_total
             position["short_margin_used"] += margin
             self.portfolio["margin_used"] += margin
@@ -203,7 +204,9 @@ class Backtester:
         if dates.empty:
             raise ValueError("No trading days in the specified range")
 
-        self.portfolio_values = [{"Date": dates[0], "Portfolio Value": self.initial_capital}]
+        self.portfolio_values = [
+            {"Date": dates[0], "Portfolio Value": self.initial_capital}
+        ]
 
         for current_date in dates:
             lookback_start = (current_date - timedelta(days=30)).strftime("%Y-%m-%d")
@@ -239,7 +242,9 @@ class Backtester:
                 )
 
             total_value = self.calculate_portfolio_value(current_prices)
-            self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
+            self.portfolio_values.append(
+                {"Date": current_date, "Portfolio Value": total_value}
+            )
 
         performance = self._update_performance_metrics()
         return performance
@@ -255,18 +260,26 @@ class Backtester:
             excess = returns - daily_rf
             mean = excess.mean()
             std = excess.std()
-            metrics["sharpe_ratio"] = float(np.sqrt(252) * (mean / std)) if std > 1e-12 else 0.0
+            metrics["sharpe_ratio"] = (
+                float(np.sqrt(252) * (mean / std)) if std > 1e-12 else 0.0
+            )
             neg = excess[excess < 0]
             if len(neg) > 0:
                 d_std = neg.std()
-                metrics["sortino_ratio"] = float(np.sqrt(252) * (mean / d_std)) if d_std > 1e-12 else float("inf")
+                metrics["sortino_ratio"] = (
+                    float(np.sqrt(252) * (mean / d_std))
+                    if d_std > 1e-12
+                    else float("inf")
+                )
             else:
                 metrics["sortino_ratio"] = float("inf") if mean > 0 else 0.0
             roll_max = df["Portfolio Value"].cummax()
             drawdown = (df["Portfolio Value"] - roll_max) / roll_max
             metrics["max_drawdown"] = float(drawdown.min() * 100)
         else:
-            metrics["sharpe_ratio"] = metrics["sortino_ratio"] = metrics["max_drawdown"] = 0.0
+            metrics["sharpe_ratio"] = metrics["sortino_ratio"] = metrics[
+                "max_drawdown"
+            ] = 0.0
 
         self.performance_metrics = metrics
         return metrics
@@ -293,11 +306,17 @@ class Backtester:
 
 if __name__ == "__main__":  # pragma: no cover
     parser = argparse.ArgumentParser(description="Run backtest over VN stocks")
-    parser.add_argument("--tickers", required=True, help="Comma separated list of tickers")
+    parser.add_argument(
+        "--tickers", required=True, help="Comma separated list of tickers"
+    )
     parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", required=True, help="End date YYYY-MM-DD")
-    parser.add_argument("--cash", type=float, default=5_000_000, help="Starting capital")
-    parser.add_argument("--margin", type=float, default=0.0, help="Margin requirement for shorts")
+    parser.add_argument(
+        "--cash", type=float, default=5_000_000, help="Starting capital"
+    )
+    parser.add_argument(
+        "--margin", type=float, default=0.0, help="Margin requirement for shorts"
+    )
     args = parser.parse_args()
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
@@ -313,4 +332,3 @@ if __name__ == "__main__":  # pragma: no cover
 
     backtester.run_backtest()
     backtester.analyze_performance()
-
