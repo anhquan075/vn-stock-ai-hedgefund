@@ -3,8 +3,9 @@
 This module implements a lightweight version of the backtester found in
 `virattt/ai-hedge-fund`.  It simulates trading decisions returned by a
 user‑provided agent and tracks portfolio performance, including support for
-shorting with margin requirements.  The default agent provided here is a very
-simple moving‑average crossover strategy used for demonstration and tests.
+shorting with margin requirements.  By default the backtester drives its trades
+via the repository's multi‑agent workflow, combining the research and decision
+teams to generate daily signals.
 
 The backtester is intentionally self‑contained so that it can run inside this
 repository without additional services.  It only relies on price data fetched
@@ -67,46 +68,74 @@ def get_insider_trades(*_: Any, **__: Any) -> pd.DataFrame:  # pragma: no cover 
 def get_company_news(*_: Any, **__: Any) -> list[Any]:  # pragma: no cover - stub
     return []
 
-
 # ---------------------------------------------------------------------------
 # Trading agent
 # ---------------------------------------------------------------------------
 
 
-def simple_sma_agent(
+def _parse_action(markdown: str) -> str:
+    """Extract BUY/SELL/HOLD action from a DecisionTeam markdown output."""
+
+    import re
+
+    match = re.search(r"Action:\s*(BUY|SELL|HOLD)", markdown, re.IGNORECASE)
+    if not match:
+        return "hold"
+    return match.group(1).lower()
+
+
+def multi_agent_decision_agent(
     *, tickers: list[str], start_date: str, end_date: str, portfolio: dict, **_: Any
 ) -> Dict[str, Dict[str, Any]]:
-    """Very small demonstration agent.
+    """Use the project\'s multi-agent workflow to generate trade decisions.
 
-    For each ticker a 5/20 moving‑average crossover is evaluated using the
-    historical close prices.  The agent returns a dictionary mapping tickers to
-    an action ("buy", "sell", "short", "cover", or "hold") and the
-    quantity of shares.  Only one share is traded at a time to keep the example
-    simple.
+    For each ticker the pipeline fetches data via :class:`agents.data_agent.DataAgent`,
+    runs the :class:`agents.researchers.research_team.ResearchTeam` to obtain
+    bullish and bearish arguments, and finally asks the
+    :class:`agents.trading.decision_team.DecisionTeam` for a trading decision.
+    The result is mapped to the action vocabulary used by :class:`Backtester`.
     """
 
+    from datetime import datetime as _dt
+    import asyncio as _asyncio
+
+    from agents.data_agent import DataAgent
+    from agents.researchers.research_team import ResearchTeam
+    from agents.trading.decision_team import DecisionTeam
+
+    data_agent = DataAgent()
+    research_team = ResearchTeam()
+    decision_team = DecisionTeam()
+
+    start_dt = _dt.strptime(start_date, "%Y-%m-%d")
+    end_dt = _dt.strptime(end_date, "%Y-%m-%d")
+
     decisions: Dict[str, Dict[str, Any]] = {}
+
     for ticker in tickers:
-        data = get_price_data(ticker, start_date, end_date)
-        if data.empty or len(data) < 20:
+        try:
+            ohlcv = data_agent.fetch(ticker, start=start_dt, end=end_dt)
+        except Exception:
+            ohlcv = pd.DataFrame()
+
+        if ohlcv.empty:
             decisions[ticker] = {"action": "hold", "quantity": 0}
             continue
 
-        close = data["close"]
-        fast = close.rolling(5).mean().iloc[-1]
-        slow = close.rolling(20).mean().iloc[-1]
+        try:
+            bull, bear = _asyncio.run(research_team.run(ticker, ohlcv))
+            decision_md = _asyncio.run(decision_team.run(bull, bear))
+            act = _parse_action(decision_md)
+        except Exception:
+            act = "hold"
 
-        if np.isnan(fast) or np.isnan(slow):
-            decisions[ticker] = {"action": "hold", "quantity": 0}
-            continue
-
-        action = "buy" if fast > slow else "sell"
-        # If no long position exists and action is "sell", interpret it as a short
         pos = portfolio["positions"][ticker]
-        if action == "sell" and pos["long"] == 0:
-            action = "short"
+        if act == "buy" and pos["short"] > 0:
+            act = "cover"
+        elif act == "sell" and pos["long"] == 0:
+            act = "short"
 
-        decisions[ticker] = {"action": action, "quantity": 1}
+        decisions[ticker] = {"action": act, "quantity": 1 if act != "hold" else 0}
 
     return {"decisions": decisions, "analyst_signals": {}}
 
@@ -366,7 +395,7 @@ if __name__ == "__main__":  # pragma: no cover
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
 
     backtester = Backtester(
-        agent=simple_sma_agent,
+        agent=multi_agent_decision_agent,
         tickers=tickers,
         start_date=args.start,
         end_date=args.end,
