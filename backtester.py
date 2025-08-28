@@ -354,19 +354,14 @@ class Backtester:
         return df
 
 
-# ---------------------------------------------------------------------------
-# CLI entry point
-# ---------------------------------------------------------------------------
-
-
-def main(argv: list[str] | None = None) -> None:
+if __name__ == "__main__":  # pragma: no cover
     parser = argparse.ArgumentParser(description="Run backtest over VN stocks")
     parser.add_argument("--tickers", required=True, help="Comma separated list of tickers")
     parser.add_argument("--start", required=True, help="Start date YYYY-MM-DD")
     parser.add_argument("--end", required=True, help="End date YYYY-MM-DD")
-    parser.add_argument("--cash", type=float, default=100_000, help="Starting capital")
+    parser.add_argument("--cash", type=float, default=5_000_000, help="Starting capital")
     parser.add_argument("--margin", type=float, default=0.0, help="Margin requirement for shorts")
-    args = parser.parse_args(argv)
+    args = parser.parse_args()
 
     tickers = [t.strip().upper() for t in args.tickers.split(",") if t.strip()]
 
@@ -381,8 +376,4 @@ def main(argv: list[str] | None = None) -> None:
 
     backtester.run_backtest()
     backtester.analyze_performance()
-
-
-if __name__ == "__main__":  # pragma: no cover
-    main()
 
