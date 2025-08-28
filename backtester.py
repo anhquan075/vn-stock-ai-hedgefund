@@ -1,45 +1,25 @@
-"""Long/short portfolio backtester inspired by ai-hedge-fund project.
-
-This module implements a lightweight version of the backtester found in
-`virattt/ai-hedge-fund`.  It simulates trading decisions returned by a
-user‑provided agent and tracks portfolio performance, including support for
-shorting with margin requirements.  By default the backtester drives its trades
-via the repository's multi‑agent workflow, combining the research and decision
-teams to generate daily signals.
-
-The backtester is intentionally self‑contained so that it can run inside this
-repository without additional services.  It only relies on price data fetched
-via :mod:`vnstock`.
-"""
+"""Long/short portfolio backtester using the project's multi-agent workflow."""
 
 from __future__ import annotations
 
 import argparse
+import asyncio
+import re
 from datetime import datetime, timedelta
-from typing import Any, Callable, Dict
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-from colorama import Fore, Style, init
-
 from vnstock import Company
 
+from agents.data_agent import DataAgent
+from agents.researchers.research_team import ResearchTeam
+from agents.trading.decision_team import DecisionTeam
 from config.settings import settings
-
-init(autoreset=True)
-
-
-# ---------------------------------------------------------------------------
-# Data helpers
-# ---------------------------------------------------------------------------
 
 
 def get_price_data(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Fetch daily price data for *ticker* between ``start`` and ``end``.
-
-    The data is retrieved using :class:`vnstock.Company` with the source
-    configured via :class:`config.settings.settings`.
-    """
+    """Fetch daily price data for *ticker* between ``start`` and ``end``."""
 
     src = settings.VNSTOCK_SOURCE.upper()
     df = Company(symbol=ticker, source=src).history(start=start, end=end)
@@ -49,108 +29,47 @@ def get_price_data(ticker: str, start: str, end: str) -> pd.DataFrame:
     df.index = pd.to_datetime(df["time"])
     return df.sort_index()
 
-
-def get_prices(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Wrapper kept for API parity with the original project."""
-
-    return get_price_data(ticker, start, end)
-
-
-# Stubs for external data – kept for compatibility with the original API
-def get_financial_metrics(*_: Any, **__: Any) -> pd.DataFrame:  # pragma: no cover - stub
-    return pd.DataFrame()
-
-
-def get_insider_trades(*_: Any, **__: Any) -> pd.DataFrame:  # pragma: no cover - stub
-    return pd.DataFrame()
-
-
-def get_company_news(*_: Any, **__: Any) -> list[Any]:  # pragma: no cover - stub
-    return []
-
-# ---------------------------------------------------------------------------
-# Trading agent
-# ---------------------------------------------------------------------------
-
-
 def _parse_action(markdown: str) -> str:
-    """Extract BUY/SELL/HOLD action from a DecisionTeam markdown output."""
-
-    import re
-
     match = re.search(r"Action:\s*(BUY|SELL|HOLD)", markdown, re.IGNORECASE)
-    if not match:
-        return "hold"
-    return match.group(1).lower()
+    return match.group(1).lower() if match else "hold"
 
 
 def multi_agent_decision_agent(
     *, tickers: list[str], start_date: str, end_date: str, portfolio: dict, **_: Any
-) -> Dict[str, Dict[str, Any]]:
-    """Use the project\'s multi-agent workflow to generate trade decisions.
-
-    For each ticker the pipeline fetches data via :class:`agents.data_agent.DataAgent`,
-    runs the :class:`agents.researchers.research_team.ResearchTeam` to obtain
-    bullish and bearish arguments, and finally asks the
-    :class:`agents.trading.decision_team.DecisionTeam` for a trading decision.
-    The result is mapped to the action vocabulary used by :class:`Backtester`.
-    """
-
-    from datetime import datetime as _dt
-    import asyncio as _asyncio
-
-    from agents.data_agent import DataAgent
-    from agents.researchers.research_team import ResearchTeam
-    from agents.trading.decision_team import DecisionTeam
-
+) -> dict[str, dict[str, Any]]:
     data_agent = DataAgent()
     research_team = ResearchTeam()
     decision_team = DecisionTeam()
 
-    start_dt = _dt.strptime(start_date, "%Y-%m-%d")
-    end_dt = _dt.strptime(end_date, "%Y-%m-%d")
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
 
-    decisions: Dict[str, Dict[str, Any]] = {}
-
+    decisions: dict[str, dict[str, Any]] = {}
     for ticker in tickers:
         try:
             ohlcv = data_agent.fetch(ticker, start=start_dt, end=end_dt)
-        except Exception:
-            ohlcv = pd.DataFrame()
-
-        if ohlcv.empty:
-            decisions[ticker] = {"action": "hold", "quantity": 0}
-            continue
-
-        try:
-            bull, bear = _asyncio.run(research_team.run(ticker, ohlcv))
-            decision_md = _asyncio.run(decision_team.run(bull, bear))
+            if ohlcv.empty:
+                raise ValueError
+            bull, bear = asyncio.run(research_team.run(ticker, ohlcv))
+            decision_md = asyncio.run(decision_team.run(bull, bear))
             act = _parse_action(decision_md)
         except Exception:
             act = "hold"
 
         pos = portfolio["positions"][ticker]
-        if act == "buy" and pos["short"] > 0:
+        if act == "buy" and pos["short"]:
             act = "cover"
-        elif act == "sell" and pos["long"] == 0:
+        elif act == "sell" and not pos["long"]:
             act = "short"
-
         decisions[ticker] = {"action": act, "quantity": 1 if act != "hold" else 0}
 
     return {"decisions": decisions, "analyst_signals": {}}
 
 
-# ---------------------------------------------------------------------------
-# Backtester implementation
-# ---------------------------------------------------------------------------
-
-
 class Backtester:
-    """Simulate trades over a period for a set of tickers."""
-
     def __init__(
         self,
-        agent: Callable[..., Dict[str, Dict[str, Any]]],
+        agent: Callable[..., dict[str, dict[str, Any]]],
         tickers: list[str],
         start_date: str,
         end_date: str,
@@ -163,7 +82,6 @@ class Backtester:
         self.end_date = end_date
         self.initial_capital = float(initial_capital)
 
-        # Portfolio structure closely mirrors the original project
         self.portfolio = {
             "cash": float(initial_capital),
             "margin_used": 0.0,
@@ -183,19 +101,10 @@ class Backtester:
             },
         }
 
-        self.portfolio_values: list[Dict[str, Any]] = []
-
-    # ------------------------------------------------------------------
-    # Trade execution helpers
-    # ------------------------------------------------------------------
+        self.portfolio_values: list[dict[str, Any]] = []
 
     def execute_trade(self, ticker: str, action: str, quantity: float, current_price: float) -> int:
-        """Execute a trade and update the portfolio.
-
-        Supports ``buy``, ``sell``, ``short`` and ``cover`` operations.  The
-        method closely follows the logic used in the original project but omits
-        some edge‑case checks for brevity.
-        """
+        """Update the portfolio for buy, sell, short or cover actions."""
 
         if quantity <= 0:
             return 0
@@ -236,7 +145,10 @@ class Backtester:
             proceeds = current_price * quantity
             margin = proceeds * self.portfolio["margin_requirement"]
             if margin > self.portfolio["cash"]:
-                max_q = int(self.portfolio["cash"] / (current_price * self.portfolio["margin_requirement"]))
+                max_q = int(
+                    self.portfolio["cash"]
+                    / (current_price * self.portfolio["margin_requirement"])
+                )
                 quantity = max_q
                 proceeds = current_price * quantity
                 margin = proceeds * self.portfolio["margin_requirement"]
@@ -276,11 +188,7 @@ class Backtester:
 
         return 0
 
-    # ------------------------------------------------------------------
-    # Backtest loop
-    # ------------------------------------------------------------------
-
-    def calculate_portfolio_value(self, current_prices: Dict[str, float]) -> float:
+    def calculate_portfolio_value(self, current_prices: dict[str, float]) -> float:
         total = self.portfolio["cash"]
         for t in self.tickers:
             pos = self.portfolio["positions"][t]
@@ -290,7 +198,7 @@ class Backtester:
                 total -= pos["short"] * price
         return total
 
-    def run_backtest(self) -> Dict[str, float]:
+    def run_backtest(self) -> dict[str, float]:
         dates = pd.date_range(self.start_date, self.end_date, freq="B")
         if dates.empty:
             raise ValueError("No trading days in the specified range")
@@ -302,8 +210,7 @@ class Backtester:
             current_str = current_date.strftime("%Y-%m-%d")
             prev_str = (current_date - timedelta(days=1)).strftime("%Y-%m-%d")
 
-            # get last close for each ticker
-            current_prices: Dict[str, float] = {}
+            current_prices: dict[str, float] = {}
             missing = False
             for t in self.tickers:
                 data = get_price_data(t, prev_str, current_str)
@@ -324,7 +231,12 @@ class Backtester:
 
             for t in self.tickers:
                 decision = decisions.get(t, {"action": "hold", "quantity": 0})
-                self.execute_trade(t, decision.get("action", "hold"), decision.get("quantity", 0), current_prices[t])
+                self.execute_trade(
+                    t,
+                    decision.get("action", "hold"),
+                    decision.get("quantity", 0),
+                    current_prices[t],
+                )
 
             total_value = self.calculate_portfolio_value(current_prices)
             self.portfolio_values.append({"Date": current_date, "Portfolio Value": total_value})
@@ -332,15 +244,11 @@ class Backtester:
         performance = self._update_performance_metrics()
         return performance
 
-    # ------------------------------------------------------------------
-    # Performance analysis
-    # ------------------------------------------------------------------
-
-    def _update_performance_metrics(self) -> Dict[str, float]:
+    def _update_performance_metrics(self) -> dict[str, float]:
         df = pd.DataFrame(self.portfolio_values).set_index("Date")
         df["Daily Return"] = df["Portfolio Value"].pct_change()
         returns = df["Daily Return"].dropna()
-        metrics: Dict[str, float] = {}
+        metrics: dict[str, float] = {}
 
         if not returns.empty:
             daily_rf = 0.0434 / 252
@@ -372,7 +280,7 @@ class Backtester:
         end_val = df["Portfolio Value"].iloc[-1]
         total_return = (end_val / start_val - 1) * 100
 
-        print(f"{Fore.WHITE}{Style.BRIGHT}Backtest Performance{Style.RESET_ALL}\n")
+        print("Backtest Performance\n")
         print(f"Start value : {start_val:,.2f}")
         print(f"End value   : {end_val:,.2f}")
         print(f"Total return: {total_return:,.2f}%")
