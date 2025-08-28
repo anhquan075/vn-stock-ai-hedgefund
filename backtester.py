@@ -8,24 +8,23 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-from vnstock import Company
 
 from agents.data_agent import DataAgent
 from agents.researchers.research_team import ResearchTeam
 from agents.trading.decision_team import DecisionTeam
-from config.settings import settings
 
 
 def get_price_data(ticker: str, start: str, end: str) -> pd.DataFrame:
-    """Fetch daily price data for *ticker* between ``start`` and ``end``."""
+    """Fetch daily price data via DataAgent with tolerant symbol handling."""
 
-    src = settings.VNSTOCK_SOURCE.upper()
-    df = Company(symbol=ticker, source=src).history(start=start, end=end)
-    if df.empty:
-        return df
-    df = df.copy()
-    df.index = pd.to_datetime(df["time"])
-    return df.sort_index()
+    data_agent = DataAgent()
+    start_dt = datetime.strptime(start, "%Y-%m-%d")
+    end_dt = datetime.strptime(end, "%Y-%m-%d")
+    try:
+        df = data_agent.fetch(ticker, start=start_dt, end=end_dt, interval="1d")
+    except Exception:
+        return pd.DataFrame()
+    return df
 
 
 def _parse_action(markdown: str) -> str:
@@ -220,7 +219,8 @@ class Backtester:
                 if data.empty:
                     missing = True
                     break
-                current_prices[t] = float(data.iloc[-1]["close"])
+                # DataAgent ensures canonical 'Close' column
+                current_prices[t] = float(data.iloc[-1]["Close"])
             if missing:
                 continue
 

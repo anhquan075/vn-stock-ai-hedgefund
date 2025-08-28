@@ -6,7 +6,8 @@ other agents (analysis, backtest, etc.) can consume it.
 """
 
 import asyncio
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 import pandas as pd
@@ -57,11 +58,30 @@ class DataAgent(BaseAgent):
             description="Fetches VN stock data via yfinance",
             monitoring=False,
         )
-        self._source: SourceType = (source or settings.DATA_SOURCE).lower()   # type: ignore[assignment]
+        self._source: SourceType = (source or settings.DATA_SOURCE).lower()  # type: ignore[assignment]
 
     # ---------------------------------------------------------------------
     # Public API
     # ---------------------------------------------------------------------
+    @staticmethod
+    def _normalize_symbols(symbol: str) -> tuple[str, str]:
+        """Return (vnstock_symbol, yfinance_symbol) from a raw input symbol.
+
+        The function is tolerant of inputs like "$HPG", "hpg", "HPG.VN", etc.
+        """
+        # Keep only alphanumerics and dots first
+        raw = re.sub(r"[^A-Z0-9.]", "", symbol.strip().upper())
+        # Strip common VN suffixes if present
+        if raw.endswith(".VN"):
+            base = raw[:-3]
+        elif raw.endswith("VN"):
+            base = raw[:-2]
+        else:
+            base = raw
+        # Ensure the base contains only alphanumerics (no residual dots)
+        base = re.sub(r"[^A-Z0-9]", "", base)
+        return base, f"{base}.VN"
+
     def fetch(
         self,
         symbol: str,
@@ -134,13 +154,13 @@ class DataAgent(BaseAgent):
             start_str = start.strftime("%Y-%m-%d")
             end_str = end.strftime("%Y-%m-%d")
 
-            base_symbol = symbol.replace(".VN", "").upper() if self._source != "vnstock" else symbol.upper()
+            vn_symbol, yf_symbol = self._normalize_symbols(symbol)
 
             df: pd.DataFrame | None = None
             # Use vnstock Quote API
             if Quote is not None:
                 try:
-                    q = Quote(symbol=base_symbol, source=settings.VNSTOCK_SOURCE)
+                    q = Quote(symbol=vn_symbol, source=settings.VNSTOCK_SOURCE)
                     df = q.history(
                         start=start_str,
                         end=end_str,
@@ -151,13 +171,14 @@ class DataAgent(BaseAgent):
                     df = None
             if df is None or df.empty:
                 # Fallback to Yahoo if vnstock has no data
-                yf_symbol = (
-                    base_symbol if symbol.endswith(".VN") else f"{base_symbol}.VN"
-                )
                 ticker = yf.Ticker(yf_symbol)
+                # yfinance end is exclusive for daily-and-above intervals
+                end_for_yf = end
+                if interval in {"1d", "5d", "1wk", "1mo", "3mo"} and end is not None:
+                    end_for_yf = end + timedelta(days=1)
                 df = ticker.history(
                     start=start,
-                    end=end,
+                    end=end_for_yf,
                     interval=interval,
                     period=None,
                     auto_adjust=auto_adjust,
@@ -183,6 +204,12 @@ class DataAgent(BaseAgent):
                 )
                 df = df.dropna(subset=["Datetime"])  # drop unparsable rows
                 df = df.set_index("Datetime")
+            # Remove timezone info for consistency
+            if isinstance(df.index, pd.DatetimeIndex):
+                try:
+                    df.index = df.index.tz_convert(None)
+                except Exception:
+                    df.index = df.index.tz_localize(None)
             # Keep only standard columns if available
             for required in ["Open", "High", "Low", "Close", "Volume"]:
                 if required not in df.columns:
@@ -190,16 +217,27 @@ class DataAgent(BaseAgent):
                         "vnstock response missing required column: " + required
                     )
         else:
-            yf_symbol = symbol
+            _, yf_symbol = self._normalize_symbols(symbol)
             ticker = yf.Ticker(yf_symbol)
+            # yfinance end is exclusive for daily-and-above intervals
+            end_for_yf = end
+            if interval in {"1d", "5d", "1wk", "1mo", "3mo"} and end is not None:
+                end_for_yf = end + timedelta(days=1)
             df = ticker.history(
                 start=start,
-                end=end,
+                end=end_for_yf,
                 interval=interval,
                 period=None if start or end else period,
                 auto_adjust=auto_adjust,
                 **kwargs,
             )
+        # Ensure sorted index and uniform dtype
+        if not df.empty and isinstance(df.index, pd.DatetimeIndex):
+            try:
+                df.index = df.index.tz_convert(None)
+            except Exception:
+                df.index = df.index.tz_localize(None)
+            df = df.sort_index()
         if df.empty:
             raise ValueError(f"No data returned for symbol '{symbol}'.")
         return df
